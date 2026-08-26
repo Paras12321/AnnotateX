@@ -104,3 +104,46 @@ def evaluate_quality(
         decision=decision,
         reason=reason,
     )
+
+
+import logging
+
+def evaluate_batch(
+    detections_by_image: dict[str, list[Detection]],
+    image_dims: dict[str, tuple[int, int]],
+    config: dict,
+) -> dict[str, list[QualityResult]]:
+    """Runs evaluate_quality for every detection in every image.
+
+    Args:
+        detections_by_image: Dictionary mapping image_id to list of Detections.
+        image_dims: Dictionary mapping image_id to (width, height).
+        config: Configuration dict with thresholds.
+
+    Returns:
+        Dictionary mapping image_id to list of QualityResult objects.
+        If an image has zero detections, returns an empty list for that image_id.
+    """
+    results: dict[str, list[QualityResult]] = {}
+    
+    for image_id, detections in detections_by_image.items():
+        if image_id not in image_dims:
+            logging.warning(f"Image dimensions missing for image_id: {image_id}. Skipping quality evaluation.")
+            continue
+            
+        width, height = image_dims[image_id]
+        
+        image_quality_results = []
+        for detection in detections:
+            qr = evaluate_quality(
+                detection=detection,
+                all_detections_same_image=detections,
+                image_width=width,
+                image_height=height,
+                config=config,
+            )
+            image_quality_results.append(qr)
+            
+        results[image_id] = image_quality_results
+        
+    return results

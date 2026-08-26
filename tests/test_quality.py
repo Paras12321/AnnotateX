@@ -347,4 +347,65 @@ class TestBuildProcessingResult:
         assert result.processing_time_ms == 42.5
         # accepted + flagged + rejected should cover all detections
         total_routed = len(result.accepted) + len(result.flagged) + len(result.rejected)
+        total_routed = len(result.accepted) + len(result.flagged) + len(result.rejected)
         assert total_routed == 2
+
+
+# ===== Quality Engine: evaluate_batch =====
+
+from quality.engine import evaluate_batch
+import logging
+
+class TestEvaluateBatch:
+    """Tests for quality/engine.py — evaluate_batch."""
+
+    DEFAULT_CONFIG = {"conf_threshold": 0.5, "min_area_px": 400, "iou_threshold": 0.9}
+
+    def test_evaluate_batch_mixed_images(self):
+        det1 = _det(image_id="img1", bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9)  # ACCEPT
+        det2 = _det(image_id="img2", bbox=[10.0, 10.0, 200.0, 200.0], conf=0.3)  # FLAG
+        
+        detections_by_image = {
+            "img1": [det1],
+            "img2": [det2]
+        }
+        image_dims = {
+            "img1": (640, 480),
+            "img2": (800, 600)
+        }
+        
+        results = evaluate_batch(detections_by_image, image_dims, self.DEFAULT_CONFIG)
+        
+        assert "img1" in results
+        assert "img2" in results
+        assert len(results["img1"]) == 1
+        assert len(results["img2"]) == 1
+        
+        assert results["img1"][0].decision == "ACCEPT"
+        assert results["img2"][0].decision == "FLAG"
+
+    def test_evaluate_batch_zero_detections(self):
+        detections_by_image = {
+            "img1": []
+        }
+        image_dims = {
+            "img1": (640, 480)
+        }
+        
+        results = evaluate_batch(detections_by_image, image_dims, self.DEFAULT_CONFIG)
+        
+        assert "img1" in results
+        assert len(results["img1"]) == 0
+
+    def test_evaluate_batch_missing_dims_skips(self, caplog):
+        det1 = _det(image_id="img1", bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9)
+        detections_by_image = {
+            "img1": [det1]
+        }
+        image_dims = {}  # Missing img1
+        
+        with caplog.at_level(logging.WARNING):
+            results = evaluate_batch(detections_by_image, image_dims, self.DEFAULT_CONFIG)
+        
+        assert "img1" not in results
+        assert "Image dimensions missing for image_id: img1" in caplog.text
