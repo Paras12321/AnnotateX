@@ -5,11 +5,13 @@ Test cases:
     - run_inference() on a known sample image returns a non-empty list of Detection objects.
     - Each Detection has valid types: bbox is list of 4 floats, conf between 0 and 1.
     - run_inference() on a nonexistent path raises FileNotFoundError.
+    - run_inference_batch() skips corrupt ImageInput objects without raising.
+    - Empty batch input returns empty dict, no error.
+    - Batch with mixed ok/corrupt returns only ok entries.
 
 Owner: Member A
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -18,8 +20,8 @@ import pytest
 # Ensure project root is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from inference.yolo_infer import run_inference
-from models.contracts import Detection
+from inference.yolo_infer import run_inference, run_inference_batch
+from models.contracts import Detection, ImageInput
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -32,13 +34,14 @@ def _find_sample_image() -> str | None:
     """Return the path to the first usable image in sample_data/, or None."""
     for ext in ("*.jpg", "*.jpeg", "*.png", "*.bmp"):
         matches = list(SAMPLE_DIR.glob(ext))
-        if matches:
-            return str(matches[0])
+        for m in matches:
+            if "corrupt" not in m.name:
+                return str(m)
     return None
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# run_inference tests (Day 1, preserved)
 # ---------------------------------------------------------------------------
 
 
@@ -59,7 +62,6 @@ class TestRunInference:
         detections = run_inference(img)
 
         assert isinstance(detections, list), "Expected list return type"
-        # A real YOLO model on a typical photo should detect *something*
         assert len(detections) > 0, "Expected at least one detection"
 
         for det in detections:
@@ -75,26 +77,17 @@ class TestRunInference:
         assert len(detections) > 0, "Need at least one detection to validate fields"
 
         for det in detections:
-            # image_id is a string
             assert isinstance(det.image_id, str)
             assert len(det.image_id) > 0
-
-            # bbox is a list of 4 numbers (floats or ints)
-            assert isinstance(det.bbox, list), f"bbox should be list, got {type(det.bbox)}"
-            assert len(det.bbox) == 4, f"bbox should have 4 elements, got {len(det.bbox)}"
+            assert isinstance(det.bbox, list)
+            assert len(det.bbox) == 4
             for coord in det.bbox:
-                assert isinstance(coord, (int, float)), f"bbox coord should be numeric, got {type(coord)}"
-
-            # class_id is int
+                assert isinstance(coord, (int, float))
             assert isinstance(det.class_id, int)
-
-            # class_name is non-empty string
             assert isinstance(det.class_name, str)
             assert len(det.class_name) > 0
-
-            # conf is float in [0, 1]
             assert isinstance(det.conf, float)
-            assert 0.0 <= det.conf <= 1.0, f"conf out of range: {det.conf}"
+            assert 0.0 <= det.conf <= 1.0
 
     def test_bbox_absolute_pixel_coords(self):
         """Bounding box values should be in absolute pixel coords (not normalized 0-1)."""
@@ -107,10 +100,9 @@ class TestRunInference:
             pytest.skip("No detections to check")
 
         for det in detections:
-            # At least one coordinate should be > 1 (pixel coords, not normalized)
-            assert any(
-                c > 1.0 for c in det.bbox
-            ), f"bbox looks normalized, expected pixel coords: {det.bbox}"
+            assert any(c > 1.0 for c in det.bbox), (
+                f"bbox looks normalized, expected pixel coords: {det.bbox}"
+            )
 
     def test_image_id_is_filename_stem(self):
         """image_id should equal the filename stem (no extension)."""
@@ -122,6 +114,97 @@ class TestRunInference:
         expected_stem = Path(img).stem
 
         for det in detections:
-            assert det.image_id == expected_stem, (
-                f"image_id mismatch: expected '{expected_stem}', got '{det.image_id}'"
-            )
+            assert det.image_id == expected_stem
+
+
+# ---------------------------------------------------------------------------
+# run_inference_batch tests (Day 2)
+# ---------------------------------------------------------------------------
+
+
+class TestRunInferenceBatch:
+    """Tests for the run_inference_batch() API."""
+
+    def test_empty_batch_returns_empty_dict(self):
+        """Empty input list -> empty dict, no error."""
+        result = run_inference_batch([])
+        assert result == {}
+        assert isinstance(result, dict)
+
+    def test_skips_corrupt_images(self):
+        """Corrupt ImageInput objects are skipped, not in the returned dict."""
+        corrupt = ImageInput(
+            image_id="bad",
+            file_path="/fake/corrupt.jpg",
+            status="corrupt",
+        )
+        result = run_inference_batch([corrupt])
+        assert "bad" not in result
+        assert len(result) == 0
+
+    def test_skips_unsupported_images(self):
+        """Unsupported ImageInput objects are skipped."""
+        unsupported = ImageInput(
+            image_id="doc",
+            file_path="/fake/file.txt",
+            status="unsupported_format",
+        )
+        result = run_inference_batch([unsupported])
+        assert "doc" not in result
+
+    def test_processes_ok_images(self):
+        """Images with status='ok' are processed and appear in the dict."""
+        img = _find_sample_image()
+        if img is None:
+            pytest.skip("No sample image in sample_data/")
+
+        ok_image = ImageInput(
+            image_id=Path(img).stem,
+            file_path=img,
+            width=640,
+            height=480,
+            status="ok",
+        )
+        result = run_inference_batch([ok_image])
+
+        assert Path(img).stem in result
+        detections = result[Path(img).stem]
+        assert isinstance(detections, list)
+        assert len(detections) > 0
+        for det in detections:
+            assert isinstance(det, Detection)
+
+    def test_mixed_batch_only_returns_ok(self):
+        """Batch with ok + corrupt + unsupported only processes ok images."""
+        img = _find_sample_image()
+        if img is None:
+            pytest.skip("No sample image in sample_data/")
+
+        images = [
+            ImageInput(image_id="corrupt_one", file_path="/fake/bad.jpg", status="corrupt"),
+            ImageInput(
+                image_id=Path(img).stem,
+                file_path=img,
+                width=640, height=480,
+                status="ok",
+            ),
+            ImageInput(image_id="doc", file_path="/fake/a.txt", status="unsupported_format"),
+        ]
+
+        result = run_inference_batch(images)
+
+        # Only the ok image should be in results
+        assert len(result) == 1
+        assert Path(img).stem in result
+        assert "corrupt_one" not in result
+        assert "doc" not in result
+
+    def test_batch_never_raises_on_bad_input(self):
+        """run_inference_batch with only bad inputs should not raise."""
+        images = [
+            ImageInput(image_id="c1", file_path="/fake/c1.jpg", status="corrupt"),
+            ImageInput(image_id="c2", file_path="/fake/c2.png", status="corrupt"),
+        ]
+        result = run_inference_batch(images)  # Must not raise
+        assert isinstance(result, dict)
+        assert len(result) == 0
