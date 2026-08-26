@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AnnotateX — project-specific
+outputs/
+!outputs/README.md
+*.pt
+*.onnx

@@ -1,0 +1,16 @@
+# AnnotateX — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core ML / CV
+ultralytics>=8.0.0          # YOLOv8 model loading and inference
+opencv-python>=4.8.0        # Image processing, drawing bounding boxes
+Pillow>=10.0.0              # Image format validation and loading
+
+# UI
+gradio>=4.0.0               # Web-based demo interface
+
+# Config
+PyYAML>=6.0                 # Reading configs/config.yaml
+
+# Testing
+pytest>=7.0.0               # Unit and integration testing

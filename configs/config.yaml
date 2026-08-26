@@ -1,0 +1,30 @@
+# AnnotateX Configuration
+# Human-readable thresholds — tune these without changing code.
+
+# Quality Engine thresholds
+conf_threshold: 0.5          # Minimum confidence to pass Rule 1
+min_area_px: 400             # Minimum bounding box area (pixels) to pass Rule 3
+iou_threshold: 0.9           # IoU threshold for duplicate detection (Rule 4)
+
+# Preprocessing
+max_image_size: 1920         # Resize images larger than this (longest side, pixels)
+supported_formats:           # Accepted image file extensions
+  - jpg
+  - jpeg
+  - png
+  - bmp
+
+# Class names (COCO pretrained YOLOv8 defaults — subset for demo)
+class_names:
+  0: person
+  1: bicycle
+  2: car
+  3: motorcycle
+  5: bus
+  7: truck
+  14: bird
+  15: cat
+  16: dog
+
+# Export
+output_dir: outputs
