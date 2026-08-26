@@ -6,16 +6,22 @@ Responsibilities:
     - run_inference(image_path) -> list[Detection]
         Run inference on a single image. Returns Detection objects with
         bbox as [x1, y1, x2, y2] in absolute pixel coordinates.
+    - run_inference_batch(images) -> dict[str, list[Detection]]
+        Run inference on a batch of ImageInput objects, skipping
+        non-ok images with logging.
 
 Owner: Member A
 """
 
+import logging
 import os
 from pathlib import Path
 
 from ultralytics import YOLO
 
-from models.contracts import Detection
+from models.contracts import Detection, ImageInput
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Lazy-loaded singleton model
@@ -91,3 +97,44 @@ def run_inference(image_path: str) -> list[Detection]:
             )
 
     return detections
+
+
+def run_inference_batch(
+    images: list[ImageInput],
+) -> dict[str, list[Detection]]:
+    """Run inference on a batch of preprocessed images.
+
+    Only processes images with status=="ok". Skipped images are logged
+    (not silently dropped) and do NOT appear in the returned dict.
+
+    Args:
+        images: List of ImageInput objects from preprocess_batch.
+
+    Returns:
+        Dict mapping image_id -> list[Detection] for successfully
+        processed images only.
+    """
+    results: dict[str, list[Detection]] = {}
+
+    for img in images:
+        if img.status != "ok":
+            logger.warning(
+                "Skipping image %s (status=%s, path=%s)",
+                img.image_id, img.status, img.file_path,
+            )
+            continue
+
+        try:
+            detections = run_inference(img.file_path)
+            results[img.image_id] = detections
+            logger.info(
+                "Inference on %s: %d detections",
+                img.image_id, len(detections),
+            )
+        except Exception:
+            logger.exception(
+                "Inference failed for %s, skipping", img.image_id
+            )
+
+    return results
+
