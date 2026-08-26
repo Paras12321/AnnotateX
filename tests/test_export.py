@@ -252,3 +252,46 @@ class TestExportCoco:
             coco = json.load(f)
 
         assert coco["annotations"][0]["score"] == 0.9
+
+
+# ---------------------------------------------------------------------------
+# Export Pipeline tests
+# ---------------------------------------------------------------------------
+
+from validation.validate_export import export_pipeline
+
+class TestExportPipeline:
+    def test_export_pipeline_filters_invalid(self, tmp_path, image_dims, class_names):
+        valid_det = Detection("img1", [10, 10, 100, 100], 0, "person", 0.9)
+        invalid_det = Detection("img1", [10, 10, 700, 100], 0, "person", 0.9) # out of bounds
+        invalid_class_det = Detection("img1", [20, 20, 80, 80], 99, "unknown", 0.9)
+        
+        result = export_pipeline([valid_det, invalid_det, invalid_class_det], image_dims, class_names, str(tmp_path))
+        
+        assert "yolo_dir" in result
+        assert "coco_json" in result
+        
+        # Verify YOLO
+        yolo_file = os.path.join(result["yolo_dir"], "img1.txt")
+        assert os.path.exists(yolo_file)
+        with open(yolo_file) as f:
+            lines = f.read().strip().split("\n")
+        assert len(lines) == 1 # Only the valid one
+        
+        # Verify COCO
+        assert os.path.exists(result["coco_json"])
+        with open(result["coco_json"]) as f:
+            import json
+            coco = json.load(f)
+        assert len(coco["annotations"]) == 1 # Only the valid one
+
+    def test_export_pipeline_empty(self, tmp_path, image_dims, class_names):
+        result = export_pipeline([], image_dims, class_names, str(tmp_path))
+        assert "yolo_dir" in result
+        assert "coco_json" in result
+        
+        assert os.path.exists(result["coco_json"])
+        with open(result["coco_json"]) as f:
+            import json
+            coco = json.load(f)
+        assert len(coco["annotations"]) == 0
