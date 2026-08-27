@@ -90,6 +90,10 @@ class TestRuleConfidence:
         det = _det(conf=0.3)
         assert rule_confidence(det, threshold=0.5) is False
 
+    def test_fail_none_conf(self):
+        det = _det(conf=None)
+        assert rule_confidence(det, threshold=0.5) is False
+
 
 # ===== Rule: Valid Box =====
 
@@ -183,6 +187,28 @@ class TestRuleNoDuplicate:
         det = _det()
         assert rule_no_duplicate(det, [det], iou_threshold=0.0) is True
 
+    def test_three_way_duplicate_only_one_survives(self):
+        """Three identical boxes, only one should survive (highest conf/id)."""
+        det1 = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.8, class_id=0)
+        det2 = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9, class_id=0)
+        det3 = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.85, class_id=0)
+        
+        # det2 has highest conf, it should survive
+        assert rule_no_duplicate(det1, [det1, det2, det3], iou_threshold=0.9) is False
+        assert rule_no_duplicate(det2, [det1, det2, det3], iou_threshold=0.9) is True
+        assert rule_no_duplicate(det3, [det1, det2, det3], iou_threshold=0.9) is False
+
+    def test_tie_breaker_equal_confidence(self):
+        """Two identical boxes, equal conf -> tiebreaker by object ID."""
+        det1 = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9, class_id=0)
+        det2 = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9, class_id=0)
+        
+        survives1 = rule_no_duplicate(det1, [det1, det2], iou_threshold=0.9)
+        survives2 = rule_no_duplicate(det2, [det1, det2], iou_threshold=0.9)
+        
+        assert survives1 != survives2
+        assert survives1 or survives2
+
 
 # ===== Quality Engine: evaluate_quality =====
 
@@ -224,13 +250,16 @@ class TestEvaluateQuality:
         assert "not_tiny" in result.failed_rules
 
     def test_flag_duplicate(self):
-        """Good confidence, big box, but duplicate → FLAG."""
+        """Good confidence, big box, duplicate -> highest conf ACCEPT, others FLAG."""
         det_a = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.9, class_id=0)
         det_b = _det(bbox=[10.0, 10.0, 200.0, 200.0], conf=0.85, class_id=0)
-        result = evaluate_quality(det_a, [det_a, det_b], 640, 480, self.DEFAULT_CONFIG)
+        
+        result_a = evaluate_quality(det_a, [det_a, det_b], 640, 480, self.DEFAULT_CONFIG)
+        result_b = evaluate_quality(det_b, [det_a, det_b], 640, 480, self.DEFAULT_CONFIG)
 
-        assert result.decision == "FLAG"
-        assert "no_duplicate" in result.failed_rules
+        assert result_a.decision == "ACCEPT"
+        assert result_b.decision == "FLAG"
+        assert "no_duplicate" in result_b.failed_rules
 
     def test_reject_invalid_box(self):
         """Invalid bounding box (x2 < x1) → REJECT regardless of confidence."""

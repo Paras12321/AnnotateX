@@ -66,10 +66,11 @@ class TestRoute:
         det2 = _det(conf=0.2)
         
         qr1 = QualityResult(det1, ["valid_box"], ["confidence"], "FLAG", "low conf")
-        qr2 = QualityResult(det2, ["valid_box"], ["confidence"], "FLAG", "low conf")
+        # det2 failed valid_box AND confidence
+        qr2 = QualityResult(det2, [], ["confidence", "valid_box"], "REJECT", "bad box and low conf")
         
         accepted, flagged, rejected = route([qr1, qr2])
         
         assert len(accepted) == 0
-        assert len(flagged) == 2
-        assert len(rejected) == 0
+        assert len(flagged) == 2, "Both should be flagged if entire batch is low confidence"
+        assert len(rejected) == 0, "No detection should be rejected in an all-low-confidence batch"

@@ -35,13 +35,20 @@ def route(quality_results: list[QualityResult]) -> tuple[list[Detection], list[D
     flagged: list[Detection] = []
     rejected: list[Detection] = []
 
+    is_all_low_conf = len(quality_results) > 0 and all(
+        "confidence" in qr.failed_rules for qr in quality_results
+    )
+
     for qr in quality_results:
-        if qr.decision == "ACCEPT":
-            accepted.append(qr.detection)
-        elif qr.decision == "FLAG":
+        if is_all_low_conf:
             flagged.append(qr.detection)
-        elif qr.decision == "REJECT":
-            rejected.append(qr.detection)
+        else:
+            if qr.decision == "ACCEPT":
+                accepted.append(qr.detection)
+            elif qr.decision == "FLAG":
+                flagged.append(qr.detection)
+            elif qr.decision == "REJECT":
+                rejected.append(qr.detection)
 
     return accepted, flagged, rejected
 
