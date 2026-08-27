@@ -27,6 +27,8 @@ def rule_confidence(detection: Detection, threshold: float) -> bool:
     Returns:
         True if confidence meets or exceeds the threshold.
     """
+    if detection.conf is None:
+        return False
     return detection.conf >= threshold
 
 
@@ -131,6 +133,15 @@ def rule_no_duplicate(
 
         iou = compute_iou(detection.bbox, other.bbox)
         if iou >= iou_threshold:
-            return False
+            # We have a duplicate. Only one should survive.
+            # Handle None confidence gracefully by treating it as -1.0
+            other_conf = other.conf if other.conf is not None else -1.0
+            det_conf = detection.conf if detection.conf is not None else -1.0
+
+            if other_conf > det_conf:
+                return False
+            elif other_conf == det_conf:
+                if id(other) > id(detection):
+                    return False
 
     return True
