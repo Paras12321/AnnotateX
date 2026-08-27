@@ -77,18 +77,36 @@ def _format_dashboard(batch: BatchResult) -> str:
         if batch.total_detections > 0
         else 0
     )
+    
+    flag_rate = (
+        (batch.total_flagged / batch.total_detections * 100)
+        if batch.total_detections > 0
+        else 0
+    )
+
+    total_conf = 0.0
+    for pr in batch.results:
+        for det in pr.detections:
+            total_conf += det.conf
+    avg_conf = (total_conf / batch.total_detections) if batch.total_detections > 0 else 0.0
+
+    total_time = sum(pr.processing_time_ms for pr in batch.results)
+    avg_time = (total_time / len(batch.results)) if batch.results else 0.0
 
     lines = [
         "## 📊 Dashboard",
         "",
         f"| Metric | Value |",
         f"|--------|-------|",
-        f"| Total Images | {batch.total_images} |",
-        f"| Total Detections | {batch.total_detections} |",
+        f"| 🖼️ Images processed | {batch.total_images} |",
+        f"| 🎯 Total detections | {batch.total_detections} |",
         f"| ✅ Accepted | {batch.total_accepted} |",
         f"| ⚠️ Flagged | {batch.total_flagged} |",
         f"| ❌ Rejected | {batch.total_rejected} |",
-        f"| Acceptance Rate | {accept_rate:.1f}% |",
+        f"| 📈 Acceptance % | {accept_rate:.1f}% |",
+        f"| 🚩 Flag rate % | {flag_rate:.1f}% |",
+        f"| 🧠 Average confidence | {avg_conf:.2f} |",
+        f"| ⏱️ Average processing time | {avg_time:.1f} ms |",
     ]
 
     if batch.export_paths:
@@ -161,8 +179,9 @@ def process_images(files) -> tuple[str, str, list | None, list[str] | None]:
         if fp and pr.detections:
             annotated = annotate_image(fp, pr.detections, pr.quality_results)
             if annotated is not None:
+                gallery_images.append((fp, f"{pr.image_id} — Original"))
                 caption = (
-                    f"{pr.image_id}: "
+                    f"{pr.image_id} — Annotated: "
                     f"{len(pr.accepted)}✅ {len(pr.flagged)}⚠️ {len(pr.rejected)}❌"
                 )
                 gallery_images.append((annotated, caption))
@@ -227,14 +246,14 @@ def build_app() -> gr.Blocks:
                 )
 
         # --- Annotated image preview gallery ---
-        gr.Markdown("## 🔍 Annotated Preview")
+        gr.Markdown("## 🔍 Before / After Preview")
         gr.Markdown(
             "*Bounding boxes color-coded: "
             "🟢 green = accepted, 🟠 orange = flagged, 🔴 red = rejected*"
         )
 
         gallery_output = gr.Gallery(
-            label="Annotated Images",
+            label="Original vs Annotated Images",
             columns=2,
             height="auto",
             object_fit="contain",

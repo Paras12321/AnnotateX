@@ -240,3 +240,67 @@ class TestGradioApp:
         assert len(outputs) == 4
         results_md = outputs[0]
         assert "No files uploaded" in results_md
+
+
+# ---------------------------------------------------------------------------
+# Dashboard metrics tests
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardMetrics:
+    """Tests for dashboard metrics calculation."""
+
+    def test_dashboard_metrics_calculation(self):
+        """Dashboard metric calculation matches hand-computed values."""
+        from app.ui import _format_dashboard
+        
+        # Create dummy BatchResult
+        det1 = Detection(image_id="img1", bbox=[0,0,10,10], class_id=0, class_name="cat", conf=0.8)
+        det2 = Detection(image_id="img1", bbox=[0,0,10,10], class_id=0, class_name="cat", conf=0.6)
+        det3 = Detection(image_id="img2", bbox=[0,0,10,10], class_id=0, class_name="dog", conf=0.9)
+        
+        pr1 = ProcessingResult(
+            image_id="img1",
+            detections=[det1, det2],
+            quality_results=[],
+            accepted=[det1],
+            flagged=[det2],
+            rejected=[],
+            processing_time_ms=100.0,
+        )
+        pr2 = ProcessingResult(
+            image_id="img2",
+            detections=[det3],
+            quality_results=[],
+            accepted=[det3],
+            flagged=[],
+            rejected=[],
+            processing_time_ms=200.0,
+        )
+        
+        batch = BatchResult(
+            results=[pr1, pr2],
+            total_images=2,
+            total_detections=3,
+            total_accepted=2,
+            total_flagged=1,
+            total_rejected=0,
+            export_paths={},
+        )
+        
+        dashboard_md = _format_dashboard(batch)
+        
+        assert "Images processed | 2" in dashboard_md
+        assert "Total detections | 3" in dashboard_md
+        assert "Accepted | 2" in dashboard_md
+        assert "Flagged | 1" in dashboard_md
+        assert "Rejected | 0" in dashboard_md
+        
+        # Acceptance %: 2 / 3 = 66.666% -> 66.7%
+        assert "Acceptance % | 66.7%" in dashboard_md
+        # Flag rate %: 1 / 3 = 33.333% -> 33.3%
+        assert "Flag rate % | 33.3%" in dashboard_md
+        # Avg conf: (0.8 + 0.6 + 0.9) / 3 = 2.3 / 3 = 0.7666 -> 0.77
+        assert "Average confidence | 0.77" in dashboard_md
+        # Avg processing time: (100 + 200) / 2 = 150 -> 150.0 ms
+        assert "Average processing time | 150.0 ms" in dashboard_md
