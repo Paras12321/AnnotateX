@@ -208,3 +208,106 @@ class TestRunInferenceBatch:
         result = run_inference_batch(images)  # Must not raise
         assert isinstance(result, dict)
         assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# Day 3: Edge case hardening tests
+# ---------------------------------------------------------------------------
+
+
+class TestDay3InferenceEdgeCases:
+    """Day 3 — stabilization edge cases for inference."""
+
+    def test_zero_detection_image_represented_not_dropped(self):
+        """An image with zero YOLO detections must appear in the dict with [].
+
+        We create a tiny 1x1 white image that YOLO will find nothing on.
+        The key must exist in the returned dict with an empty list.
+        """
+        import tempfile
+        from PIL import Image as PILImage
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+            tiny = PILImage.new("RGB", (1, 1), color=(255, 255, 255))
+            tiny.save(f.name)
+            tiny_path = f.name
+
+        try:
+            img = ImageInput(
+                image_id="tiny_white",
+                file_path=tiny_path,
+                width=1, height=1,
+                status="ok",
+            )
+            result = run_inference_batch([img])
+
+            # The key MUST exist (not dropped), value is an empty list
+            assert "tiny_white" in result, (
+                "Zero-detection image must appear in result dict"
+            )
+            assert result["tiny_white"] == [], (
+                f"Expected empty list, got {result['tiny_white']}"
+            )
+        finally:
+            import os
+            os.unlink(tiny_path)
+
+    def test_induced_inference_failure_batch_continues(self):
+        """If one image causes an inference error, the batch continues.
+
+        We give an ok-status ImageInput pointing to a nonexistent file.
+        run_inference will raise FileNotFoundError, which
+        run_inference_batch should catch and continue.
+        """
+        img = _find_sample_image()
+        if img is None:
+            pytest.skip("No sample image")
+
+        images = [
+            # This will cause FileNotFoundError inside run_inference
+            ImageInput(
+                image_id="will_fail",
+                file_path="/tmp/this_does_not_exist_xyz.jpg",
+                status="ok",
+            ),
+            # This should succeed
+            ImageInput(
+                image_id=Path(img).stem,
+                file_path=img,
+                width=640, height=480,
+                status="ok",
+            ),
+        ]
+
+        result = run_inference_batch(images)  # Must NOT raise
+
+        # The failed image should NOT be in results
+        assert "will_fail" not in result
+        # The good image SHOULD be in results
+        assert Path(img).stem in result
+        assert len(result[Path(img).stem]) > 0
+
+    def test_empty_batch_returns_empty_dict(self):
+        """run_inference_batch([]) -> {}, no error (explicit Day 3 re-test)."""
+        result = run_inference_batch([])
+        assert result == {}
+        assert isinstance(result, dict)
+
+    def test_all_fail_batch_returns_empty_dict(self):
+        """If every image fails, we get an empty dict, no crash."""
+        images = [
+            ImageInput(
+                image_id="fail1",
+                file_path="/tmp/nope1.jpg",
+                status="ok",
+            ),
+            ImageInput(
+                image_id="fail2",
+                file_path="/tmp/nope2.jpg",
+                status="ok",
+            ),
+        ]
+        result = run_inference_batch(images)
+        assert isinstance(result, dict)
+        assert len(result) == 0
+

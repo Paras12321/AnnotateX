@@ -70,7 +70,7 @@ def validate_and_load(file_path: str) -> ImageInput:
         with Image.open(path) as img:
             width, height = img.size
 
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+    except Exception as exc:
         logger.warning("Corrupt image (%s): %s", exc, file_path)
         return ImageInput(
             image_id=image_id,
@@ -95,10 +95,21 @@ def preprocess_batch(file_paths: list[str]) -> list[ImageInput]:
 
     Returns the full list including corrupt/unsupported entries so
     downstream stages can log what was skipped and why.
+    Never raises — one broken file cannot crash the batch.
     """
     results = []
     for fp in file_paths:
-        result = validate_and_load(fp)
+        try:
+            result = validate_and_load(fp)
+        except Exception:
+            # Absolute last resort — validate_and_load should never raise,
+            # but if it somehow does, we still don't drop the entry.
+            logger.exception("Unexpected error in validate_and_load for %s", fp)
+            result = ImageInput(
+                image_id=Path(fp).stem if fp else "unknown",
+                file_path=str(fp),
+                status="corrupt",
+            )
         logger.info(
             "Preprocessed %s -> status=%s", result.image_id, result.status
         )
