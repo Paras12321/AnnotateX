@@ -183,3 +183,58 @@ class TestResizeIfNeeded:
         assert new_h <= MAX_DIMENSION
         # Aspect ratio preserved (roughly)
         assert abs(new_w / new_h - 4000 / 3000) < 0.05
+
+
+# ---------------------------------------------------------------------------
+# Day 3: Edge case hardening tests
+# ---------------------------------------------------------------------------
+
+
+class TestDay3EdgeCases:
+    """Day 3 — stabilization edge cases."""
+
+    def test_empty_batch_returns_empty_list(self):
+        """preprocess_batch([]) -> [], no error."""
+        result = preprocess_batch([])
+        assert result == []
+        assert isinstance(result, list)
+
+    def test_empty_string_path_never_raises(self):
+        """validate_and_load('') should not raise."""
+        result = validate_and_load("")
+        assert isinstance(result, ImageInput)
+        assert result.status in ("corrupt", "unsupported_format")
+
+    def test_none_like_paths_in_batch(self):
+        """Batch with pathological inputs never raises."""
+        bad_inputs = [
+            "",
+            "   ",
+            "/dev/null",
+            "/proc/cpuinfo",
+            str(SAMPLE_DIR / "nonexistent.jpg"),
+        ]
+        results = preprocess_batch(bad_inputs)
+        assert len(results) == len(bad_inputs)
+        for r in results:
+            assert isinstance(r, ImageInput)
+            assert r.status in ("ok", "corrupt", "unsupported_format")
+
+    def test_valid_image_has_positive_dimensions(self):
+        """A valid image must have width > 0 and height > 0 after loading."""
+        img = _find_sample_image()
+        if img is None:
+            pytest.skip("No sample image")
+
+        result = validate_and_load(img)
+        assert result.status == "ok"
+        assert result.width > 0, "width must be positive"
+        assert result.height > 0, "height must be positive"
+
+    def test_corrupt_image_has_zero_dimensions(self):
+        """A corrupt image should have default 0 dimensions."""
+        result = validate_and_load(str(SAMPLE_DIR / "corrupt.jpg"))
+        assert result.status == "corrupt"
+        assert result.width == 0
+        assert result.height == 0
+
