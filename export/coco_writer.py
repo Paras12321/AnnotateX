@@ -76,12 +76,9 @@ def export_coco(
     }
 
     # -- images section ---------------------------------------------------
-    # Collect unique image_ids referenced by annotations
-    image_ids_seen: set[str] = set()
+    # Collect unique image_ids referenced by image_dims
+    image_ids_seen: set[str] = set(image_dims.keys())
     image_id_to_int: dict[str, int] = {}
-
-    for det in annotations:
-        image_ids_seen.add(det.image_id)
 
     for idx, image_id in enumerate(sorted(image_ids_seen), start=1):
         img_w, img_h = image_dims[image_id]
