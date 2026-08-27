@@ -60,7 +60,8 @@ def export_yolo(
 
     written_files: dict[str, str] = {}
 
-    for image_id, dets in grouped.items():
+    for image_id in image_dims.keys():
+        dets = grouped.get(image_id, [])
         img_w, img_h = image_dims[image_id]
         lines: list[str] = []
 

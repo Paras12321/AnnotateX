@@ -115,7 +115,7 @@ class TestExportYolo:
         assert os.path.isfile(result["img2"])
 
     def test_yolo_line_has_five_numeric_fields(self, sample_detection, image_dims, tmp_path):
-        """Structural check: every YOLO line should have exactly 5 fields, all parseable."""
+        """Structural check: every YOLO line should have exactly 5 fields, all parseable, coords in [0,1]."""
         export_yolo([sample_detection], image_dims, str(tmp_path))
         with open(os.path.join(str(tmp_path), "img1.txt")) as f:
             for line in f:
@@ -126,17 +126,22 @@ class TestExportYolo:
                 assert len(parts) == 5
                 int(parts[0])  # class_id must be int-parseable
                 for v in parts[1:]:
-                    float(v)   # coords must be float-parseable
+                    val = float(v)   # coords must be float-parseable
+                    assert 0.0 <= val <= 1.0, f"Coordinate {val} out of bounds [0,1]"
 
     def test_missing_image_dims_raises(self, sample_detection, tmp_path):
         """Missing image_dims entry must raise a clear ValueError."""
         with pytest.raises(ValueError, match="Missing image_dims"):
             export_yolo([sample_detection], {}, str(tmp_path))
 
-    def test_empty_annotations_produces_empty_result(self, tmp_path):
-        """No annotations -> empty dict, no crash."""
-        result = export_yolo([], {}, str(tmp_path))
-        assert result == {}
+    def test_empty_annotations_produces_empty_result(self, image_dims, tmp_path):
+        """Zero-annotation image -> empty .txt file exists."""
+        result = export_yolo([], image_dims, str(tmp_path))
+        assert "img1" in result
+        file_path = result["img1"]
+        assert os.path.isfile(file_path)
+        with open(file_path) as f:
+            assert f.read() == ""
 
     def test_output_dir_created(self, sample_detection, image_dims, tmp_path):
         """output_dir should be created automatically if missing."""
@@ -160,9 +165,9 @@ class TestExportCoco:
             coco = json.load(f)
 
         assert "info" in coco
-        assert "images" in coco
-        assert "annotations" in coco
-        assert "categories" in coco
+        assert "images" in coco and len(coco["images"]) > 0
+        assert "annotations" in coco and len(coco["annotations"]) > 0
+        assert "categories" in coco and len(coco["categories"]) > 0
 
     def test_pixel_space_bbox(self, sample_detection, image_dims, class_names, tmp_path):
         """COCO bbox must be [x_min, y_min, width, height] in PIXELS.
@@ -290,8 +295,16 @@ class TestExportPipeline:
         assert "yolo_dir" in result
         assert "coco_json" in result
         
+        # Verify YOLO
+        yolo_file = os.path.join(result["yolo_dir"], "img1.txt")
+        assert os.path.exists(yolo_file)
+        with open(yolo_file) as f:
+            assert f.read() == ""
+            
         assert os.path.exists(result["coco_json"])
         with open(result["coco_json"]) as f:
             import json
             coco = json.load(f)
         assert len(coco["annotations"]) == 0
+        assert len(coco["images"]) == 1
+        assert len(coco["categories"]) == 1
