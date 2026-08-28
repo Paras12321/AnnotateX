@@ -28,7 +28,7 @@ The result: upload images → get a production-ready annotated dataset, with ful
 | Tool | Purpose | Why This Choice |
 |------|---------|-----------------|
 | **Python 3.10+** | Core language | Standard for ML/CV projects |
-| **Gradio** | Web UI | Fastest way to a working upload → process → download demo; built-in file widgets, no frontend build step |
+| **Gradio (Customized)** | Web UI | Overhauled into a premium dark-themed SaaS dashboard with custom CSS/JS and Plotly charts, escaping the default Gradio look while keeping Python simplicity |
 | **Ultralytics YOLOv8** | Object detection | Pretrained, fast to integrate, gives boxes + class + confidence out of the box |
 | **OpenCV** | Image processing | Resize, drawing bounding boxes, array operations |
 | **Pillow** | Image validation | Simple format checks and loading |
@@ -88,7 +88,9 @@ The result: upload images → get a production-ready annotated dataset, with ful
 AnnotateX/
 │
 ├── app/
-│   └── ui.py                     # Gradio web interface (upload, results, dashboard, download)
+│   ├── ui.py                     # Main dashboard layout and page routing
+│   ├── components.py             # Reusable HTML/Plotly UI components (sidebar, charts, tables)
+│   └── styles.py                 # Comprehensive custom CSS for the dark SaaS theme
 │
 ├── pipeline/
 │   └── orchestrator.py           # Runs pipeline stages in order, builds BatchResult
@@ -223,12 +225,13 @@ pytest tests/
 
 ## How to Use
 
-1. **Open** the Gradio app in your browser
-2. **Upload** one or more images (jpg, jpeg, png, bmp)
-3. **Click "Process"** — the pipeline runs automatically
-4. **Review results** — see accepted/flagged/rejected annotations per image with color-coded bounding boxes
-5. **Check the dashboard** — aggregate stats (acceptance rate, avg confidence, processing time)
-6. **Download** — click "Download YOLO" or "Download COCO" to get your annotated dataset
+The application features a premium multi-page dashboard accessible via the left sidebar:
+
+1. **Dashboard**: View real-time aggregate metrics, processing throughput, detection distribution (donut charts), and confidence histograms.
+2. **Upload & Process**: Drag and drop images, run the pipeline, and track progression through the 6-stage engine.
+3. **Results**: Inspect side-by-side original and annotated images with color-coded bounding boxes (Green=Accept, Orange=Flag, Red=Reject).
+4. **Quality Engine**: Review the active deterministic rules and view a transparent, per-detection audit log explaining exactly why a box was kept or dropped.
+5. **Exports**: Download your clean, pre-validated datasets in YOLO (`.txt`) and COCO (`.json`) formats.
 
 ---
 

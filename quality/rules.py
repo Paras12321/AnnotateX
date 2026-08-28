@@ -141,7 +141,17 @@ def rule_no_duplicate(
             if other_conf > det_conf:
                 return False
             elif other_conf == det_conf:
-                if id(other) > id(detection):
+                # Tie-breaker: deterministic based on list order.
+                # The one appearing LATER in the list survives.
+                idx_other = -1
+                idx_det = -1
+                for i, item in enumerate(others):
+                    if item is other:
+                        idx_other = i
+                    if item is detection:
+                        idx_det = i
+                
+                if idx_other > idx_det:
                     return False
 
     return True
